@@ -1,0 +1,10 @@
+{
+  "id": "sql-workbench",
+  "name": "SQL Workbench",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "SQL Workbench for Obsidian: an extensible SQL editor for formatting, analysis, visualization, and future execution workflows.",
+  "author": "you",
+  "authorUrl": "",
+  "isDesktopOnly": true
+}
