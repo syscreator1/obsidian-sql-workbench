@@ -151,6 +151,6 @@ that simplicity and explicitness are valued over convenience.
 
 ---
 
-## For Development
+## Development
 
 To deploy directly into your vault during development, copy `.env.example` to `.env` and set `OBSIDIAN_PLUGIN_DIR`.
