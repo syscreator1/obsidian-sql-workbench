@@ -148,3 +148,9 @@ but architectural changes should be discussed in advance.
 
 This project assumes contributors understand
 that simplicity and explicitness are valued over convenience.
+
+---
+
+## For Development
+
+To deploy directly into your vault during development, copy `.env.example` to `.env` and set `OBSIDIAN_PLUGIN_DIR`.
