@@ -12,7 +12,7 @@ export function splitSqlStatements(sqlText: string): string[] {
   for (const raw of lines) {
     const line = raw;
 
-    // ";" 単独行（前後空白は許容）
+    // Standalone ";" line (leading/trailing whitespace allowed)
     if (line.trim() === ";") {
       flush();
       continue;

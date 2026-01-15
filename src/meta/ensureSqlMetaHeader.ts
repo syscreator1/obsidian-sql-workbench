@@ -1,8 +1,8 @@
 export const DEFAULT_SQL_META_HEADER = [
-  "-- profile(任意):",
+  "-- profile(optional):",
   "-- tags(CSV):",
   "-- danger(low/medium/high): low",
-  "-- owner(任意):",
+  "-- owner(optional):",
   "-- note(free text):",
   "",
 ];
@@ -40,7 +40,7 @@ export function ensureSqlMetaHeader(text: string): { changed: boolean; text: str
 
   const found = scanMetaHeaderKeys(body);
 
-  // 先頭コメントブロックに meta が1つも無い場合 → まるごと追加
+  // If the leading comment block contains no meta at all -> prepend the whole header
   const hasAnyMeta =
     found.has("profile") ||
     found.has("tags") ||
@@ -54,15 +54,15 @@ export function ensureSqlMetaHeader(text: string): { changed: boolean; text: str
     return { changed: true, text: newText };
   }
 
-  // 不足補完（profileは先頭、それ以外は末尾へ）
+  // Fill missing fields (profile goes to the top, others go to the end)
   const missingTop: string[] = [];
   const missingRest: string[] = [];
 
-  if (!found.has("profile")) missingTop.push("-- profile(任意):");
+  if (!found.has("profile")) missingTop.push("-- profile(optional):");
 
   if (!found.has("tags")) missingRest.push("-- tags(CSV):");
   if (!found.has("danger")) missingRest.push("-- danger(low/medium/high): low");
-  if (!found.has("owner")) missingRest.push("-- owner(任意):");
+  if (!found.has("owner")) missingRest.push("-- owner(optional):");
   if (!found.has("note")) missingRest.push("-- note(free text):");
 
   if (missingTop.length === 0 && missingRest.length === 0) {
@@ -71,7 +71,7 @@ export function ensureSqlMetaHeader(text: string): { changed: boolean; text: str
 
   const lines = body.split(/\r?\n/);
 
-  // コメントブロック開始位置（空行スキップ後）
+  // Find the start of the comment block (after skipping blank lines)
   let headerStart = 0;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -81,12 +81,13 @@ export function ensureSqlMetaHeader(text: string): { changed: boolean; text: str
     break;
   }
 
-  // profile は先頭に差し込む
+  // Insert profile at the top
   if (missingTop.length > 0) {
     lines.splice(headerStart, 0, ...missingTop);
   }
 
-  // 先頭コメントブロックの最後に差し込む位置を計算（profile挿入後のlinesで再計算）
+  // Compute insertion point at the end of the leading comment block
+  // (recompute against the updated lines after inserting profile)
   let insertAt = 0;
   let started = false;
 
@@ -105,10 +106,10 @@ export function ensureSqlMetaHeader(text: string): { changed: boolean; text: str
     insertAt = i + 1;
   }
 
-  // tags/danger/owner/note を末尾に差し込む
+  // Insert tags/danger/owner/note at the end
   const toInsert = [...missingRest];
 
-  // メタブロック直後を空行で揃える
+  // Keep a blank line after the meta block
   if (toInsert.length > 0) {
     const next = lines[insertAt];
     if (insertAt === lines.length || (next?.trim() ?? "") !== "") {

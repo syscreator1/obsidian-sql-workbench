@@ -19,7 +19,7 @@ export function splitSqlStatementsWithMeta(text: string): SqlChunk[] {
     const sql = buf.join("\n").trim();
     buf = [];
     if (!sql) return;
-    // ★確定したSQLに、その時点のメタをスナップショット付与
+    // Attach a snapshot of the current metadata to the finalized SQL
     out.push({ sql, meta: { ...currentMeta } });
   };
 
@@ -27,22 +27,22 @@ export function splitSqlStatementsWithMeta(text: string): SqlChunk[] {
     const line = lines[i] ?? "";
     const trimmed = line.trim();
 
-    // --- メタ行（値が空でもメタ扱いしてSQLに入れない）---
+    // --- Meta line (treated as metadata even if the value is empty; not included in SQL) ---
     if (trimmed.startsWith("--")) {
       const m = trimmed.match(META_LINE_RE);
       if (m) {
-        // ★ここで flush しない！（文境界は ; のみ）
-        // 値がある場合だけ meta を更新（空ならテンプレ行として無視）
+        // Do NOT flush here (statement boundaries are defined only by ;)
+        // Update metadata only when a value exists (empty values are treated as template lines)
         const meta = parseSqlMeta(line + "\n");
         if (meta && Object.keys(meta).length > 0) {
           currentMeta = { ...currentMeta, ...meta };
         }
-        continue; // メタ行はSQLに入れない
+        continue; // Meta lines are not included in SQL
       }
-      // メタ形式じゃないコメントはSQLの一部として残す（必要なら）
+      // Non-meta comments are kept as part of the SQL if needed
     }
 
-    // ";" を単独行として区切る仕様
+    // Treat a standalone ";" line as a statement delimiter
     if (trimmed === ";") {
       buf.push(line);
       flush();

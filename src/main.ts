@@ -28,7 +28,7 @@ export default class SqlWorkbenchPlugin extends Plugin {
     this.registerView(VIEW_TYPE_SQL_WORKBENCH, (leaf) => new SqlWorkbenchView(leaf, this));
     this.registerView(VIEW_TYPE_SQL_WORKBENCH_WORKBENCH_SEARCH, (leaf) => new SqlWorkbenchSearchView(leaf, this));
     this.registerView(VIEW_TYPE_SQL_RESULT, (leaf) => new SqlResultView(leaf, this, () => {
-        // ★Resultタブが閉じられたらキャッシュを無効化
+        // Invalidate cache when the Result tab is closed
         if (this.resultLeaf === leaf) this.resultLeaf = null;
       })
     );
@@ -138,16 +138,16 @@ export default class SqlWorkbenchPlugin extends Plugin {
   private resultLeaf: WorkspaceLeaf | null = null;
 
   private async ensureResultLeaf(sourceLeaf: WorkspaceLeaf): Promise<WorkspaceLeaf> {
-    // すでに確保済みで生きていれば再利用
+    // Reuse if already allocated and still valid
     if (this.resultLeaf) {
-      // view が Result じゃなくなってたら無効
+      // Invalidate if the view is no longer a Result view
       if (this.resultLeaf.view?.getViewType?.() === VIEW_TYPE_SQL_RESULT) {
         return this.resultLeaf;
       }
       this.resultLeaf = null;
     }
 
-    // 既存のResultがどこかにあればそれを使う
+    // Reuse an existing Result leaf if one already exists
     const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_SQL_RESULT);
     const existing = leaves.find((l): l is WorkspaceLeaf => l !== undefined);
     if (existing) {
@@ -155,7 +155,7 @@ export default class SqlWorkbenchPlugin extends Plugin {
       return existing;
     }
 
-    // ★ sourceLeaf を基準に「上下 split」する（horizontal = 上下）
+    // Split vertically (horizontal split = top/bottom) based on sourceLeaf
     const ws: any = this.app.workspace as any;
     const resultLeaf: WorkspaceLeaf =
       ws.createLeafBySplit?.(sourceLeaf, "horizontal")
@@ -167,8 +167,8 @@ export default class SqlWorkbenchPlugin extends Plugin {
   }
 
   private getAnySqlWorkbenchView(): SqlWorkbenchView | null {
-    // いま開いている SqlWorkbenchView の leaf を拾う
-    const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_SQL_WORKBENCH); // SqlWorkbenchViewのviewType
+    // Pick an active SqlWorkbenchView leaf
+    const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_SQL_WORKBENCH); // viewType for SqlWorkbenchView
     const leaf = leaves.find((l): l is WorkspaceLeaf => l !== undefined) ?? null;
     if (!leaf) return null;
 
@@ -189,7 +189,7 @@ export default class SqlWorkbenchPlugin extends Plugin {
       title: string;
       sql: string;
       payload: any;
-      profile?: string;   // ★追加
+      profile?: string;
     }
   ) {
     const leaf = await this.ensureResultLeaf(sourceLeaf);
@@ -199,7 +199,7 @@ export default class SqlWorkbenchPlugin extends Plugin {
       args.title,
       args.sql,
       args.payload,
-      args.profile       // ★追加
+      args.profile
     );
   }
 
@@ -219,10 +219,10 @@ export default class SqlWorkbenchPlugin extends Plugin {
   public async testConnection(profile: DbProfile): Promise<{ ok: boolean; message: string; elapsedMs: number }> {
     const t0 = Date.now();
     try {
-      // テストは cache を使わず、その場で作って閉じる（安全）
+      // Do not use cache for testing; create and close the client immediately (safe)
       const client = await createClient(profile);
       try {
-        // DBごとに軽いSQL（全部 SELECT 1 でOK）
+        // Use a lightweight SQL per DB (SELECT 1 is sufficient)
         await client.query("SELECT 1 AS ok");
       } finally {
         await client.close();
@@ -234,7 +234,7 @@ export default class SqlWorkbenchPlugin extends Plugin {
   }
 
   public async resetDbClients(profileName?: string): Promise<void> {
-    const map = this.clientCache; // ★実際に使っているキャッシュ
+    const map = this.clientCache; // The actual cache in use
 
     const targets: DbClient[] = [];
     for (const [name, client] of map.entries()) {
@@ -253,7 +253,6 @@ export default class SqlWorkbenchPlugin extends Plugin {
     );
   }
 
-
   async openSqlWorkbenchSearchSidebar(
     tag: string,
     opts?: { mode?: SearchMode; action?: "add" | "remove" | "set" }
@@ -261,7 +260,7 @@ export default class SqlWorkbenchPlugin extends Plugin {
     const mode: SearchMode = opts?.mode ?? "AND";
     const action = opts?.action ?? "set";
 
-    // 右サイドバーを展開
+    // Expand the right sidebar
     try {
       const ws: any = this.app.workspace as any;
       ws.rightSplit?.expand?.();
@@ -292,7 +291,7 @@ export default class SqlWorkbenchPlugin extends Plugin {
       return;
     }
 
-    // any フォールバック
+    // any fallback
     if (action === "set") await v?.setSingleTag?.(tag);
     else await v?.updateTags?.(tag, mode, action);
   }
@@ -300,22 +299,22 @@ export default class SqlWorkbenchPlugin extends Plugin {
   private getFirstSqlToken(sqlText: string): string {
     const lines = (sqlText ?? "").split(/\r?\n/);
 
-    // 先頭のコメント/空行をスキップして、最初のSQLっぽい行を探す
+    // Skip leading comments/blank lines and find the first SQL-like line
     for (let i = 0; i < lines.length; i++) {
       let line = (lines[i] ?? "").trim();
       if (!line) continue;
 
-      // 行コメント
+      // Line comment
       if (line.startsWith("--")) continue;
 
-      // ブロックコメント開始（単純版：*/ まで飛ばす）
+      // Block comment start (simple version: skip until */)
       if (line.startsWith("/*")) {
         while (i < lines.length && !(lines[i] ?? "").includes("*/")) i++;
         continue;
       }
 
-      // ここが最初の実SQL行
-      // 先頭の括弧や ; を除去
+      // This is the first actual SQL line
+      // Strip leading parentheses or semicolons
       line = line.replace(/^[\s;()]+/, "");
       const token = (line.split(/\s+/)[0] ?? "").toLowerCase();
       return token;
@@ -351,7 +350,7 @@ export default class SqlWorkbenchPlugin extends Plugin {
 
       const file = await this.app.vault.create(path, initial);
 
-      // 作ったら開く（アクティブに）
+      // Open the file after creation (activate it)
       const leaf = this.app.workspace.getLeaf(true);
       await leaf.openFile(file, { active: true });
 
@@ -366,7 +365,7 @@ export default class SqlWorkbenchPlugin extends Plugin {
     const norm = (n: number) => (n === 0 ? "" : `-${n}`);
     for (let i = 0; i < 1000; i++) {
       const name = `${baseName}${norm(i)}.${ext}`;
-      const path = folder.path ? `${folder.path}/${name}` : name; // root対応
+      const path = folder.path ? `${folder.path}/${name}` : name; // root support
       const existing = this.app.vault.getAbstractFileByPath(path);
       if (!existing) return path;
     }
@@ -377,7 +376,8 @@ export default class SqlWorkbenchPlugin extends Plugin {
     const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_SQL_WORKBENCH);
     for (const leaf of leaves) {
       const view = leaf.view as any;
-      // SqlWorkbenchView の render() が indent を設定から再生成するので、再描画で反映される
+      // SqlWorkbenchView.render() regenerates indentation from settings,
+      // so a re-render is sufficient to apply changes
       if (typeof view?.render === "function") {
         view.render();
       }
@@ -386,7 +386,7 @@ export default class SqlWorkbenchPlugin extends Plugin {
 }
 
 export async function openSearchWithQuery(app: App, query: string) {
-  // 右サイドバーを強制的に展開（内部APIなので any）
+  // Force-expand the right sidebar (internal API, so use any)
   try {
     const ws: any = app.workspace as any;
     ws.rightSplit?.expand?.();
@@ -395,14 +395,14 @@ export async function openSearchWithQuery(app: App, query: string) {
     // ignore
   }
 
-  // 既存の search leaf を探す
+  // Look for an existing search leaf
   let leaf: WorkspaceLeaf | null =
     app.workspace.getLeavesOfType("search")[0] ?? null;
 
-  // なければ右サイドバーに作る
+  // If none exists, create one in the right sidebar
   if (!leaf) {
     const rightLeaf = app.workspace.getRightLeaf(true);
-    if (!rightLeaf) return; // ← null ガード（これが重要）
+    if (!rightLeaf) return; // null guard (important)
 
     await rightLeaf.setViewState({
       type: "search",
@@ -411,14 +411,14 @@ export async function openSearchWithQuery(app: App, query: string) {
 
     leaf = rightLeaf;
   } else {
-    // 既存があればアクティブ化
+    // Activate existing leaf
     await leaf.setViewState({
       type: "search",
       active: true,
     });
   }
 
-  // 表示・フォーカスを保証
+  // Ensure visibility and focus
   try {
     app.workspace.revealLeaf(leaf);
     app.workspace.setActiveLeaf(leaf, { focus: true } as any);
@@ -426,12 +426,12 @@ export async function openSearchWithQuery(app: App, query: string) {
     // ignore
   }
 
-  // view 初期化待ち
+  // Wait for view initialization
   await new Promise((r) => setTimeout(r, 50));
 
   const view: any = leaf.view;
 
-  // API 経由でクエリ設定
+  // Set query via API if available
   if (typeof view?.setQuery === "function") {
     view.setQuery(query);
     if (typeof view?.onQueryChanged === "function") {
@@ -440,7 +440,7 @@ export async function openSearchWithQuery(app: App, query: string) {
     return;
   }
 
-  // フォールバック（DOM）
+  // Fallback (DOM-based)
   try {
     const input: HTMLInputElement | null =
       leaf.view.containerEl.querySelector('input[type="search"]') ??
@@ -456,4 +456,3 @@ export async function openSearchWithQuery(app: App, query: string) {
     // ignore
   }
 }
-

@@ -1,7 +1,12 @@
 import type { DbClient, QueryResult } from "./DbClient";
 import type { DbProfile } from "../settings";
 
-// pg は ESM/CJS差があるので any で受けるのが安全
+/**
+ * PostgreSQL client factory.
+ *
+ * pg has ESM/CJS differences depending on version and bundler,
+ * so we accept it as `any` for maximum compatibility.
+ */
 export function createPostgresClient(pg: any, p: DbProfile): DbClient {
   const { Pool } = pg;
 
@@ -12,18 +17,23 @@ export function createPostgresClient(pg: any, p: DbProfile): DbClient {
     user: p.user,
     password: p.password,
 
-    // 必要なら後で settings 化
+    // Can be exposed as settings later if needed
     // ssl: { rejectUnauthorized: false },
+
     max: 2,
   });
 
-  // readonly をコネクション単位で効かせる（ベストエフォート）
+  /**
+   * Apply readonly mode per connection (best-effort).
+   * This may fail depending on server configuration or permissions,
+   * so errors are intentionally ignored.
+   */
   pool.on("connect", async (client: any) => {
     if (p.readonly) {
       try {
         await client.query("SET default_transaction_read_only = on;");
       } catch {
-        // 権限やサーバ設定で失敗する場合があるので握りつぶし（安全側）
+        // Ignore errors to stay on the safe side
       }
     }
   });
@@ -33,7 +43,9 @@ export function createPostgresClient(pg: any, p: DbProfile): DbClient {
       const res = await pool.query(sql);
 
       const rows = res.rows ?? [];
-      // columns: rows[0] から取れるのが一番確実。無い場合は fields から取る
+
+      // Prefer column names from the first row.
+      // Fallback to fields metadata if no rows are returned.
       const columns =
         rows.length > 0
           ? Object.keys(rows[0])

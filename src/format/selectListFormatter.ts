@@ -7,24 +7,24 @@ export function toLeadingCommas(sqlText: string): string {
 
     if (cur === undefined || next === undefined) continue;
 
-    // 行末カンマ判定（末尾コメントは軽く除去して判定）
+    // Detect a trailing comma (lightly strip trailing line comments before checking)
     const curNoComment = cur.replace(/--.*$/, "");
     if (!curNoComment.trimEnd().endsWith(",")) continue;
 
-    // 次行が空行・コメント行なら、カンマ移動しない（安全側）
+    // If the next line is blank or a comment line, do not move the comma (safer)
     if (next.trim() === "") continue;
     if (next.trimStart().startsWith("--")) continue;
 
-    // すでに次行が前カンマなら二重回避
+    // If the next line already has a leading comma, avoid doubling
     if (next.trimStart().startsWith(",")) {
       lines[i] = cur.replace(/,(?=\s*(--.*)?$)/, "");
       continue;
     }
 
-    // 現行末尾のカンマを削る
+    // Remove the trailing comma from the current line
     lines[i] = cur.replace(/,(?=\s*(--.*)?$)/, "");
 
-    // 次行のインデントを維持して先頭に ", " を付ける
+    // Preserve the next line's indentation and prefix it with ", "
     const m = next.match(/^(\s*)(.*)$/);
     const indent = m?.[1] ?? "";
     const rest = m?.[2] ?? next;
@@ -45,14 +45,14 @@ export function toTrailingCommas(sqlText: string): string {
     const m = cur.match(/^(\s*),\s+(.*)$/);
     if (!m) continue;
 
-    // 前行が空行・コメント行なら移動しない（安全側）
+    // If the previous line is blank or a comment line, do not move (safer)
     if (prev.trim() === "") continue;
     if (prev.trimStart().startsWith("--")) continue;
 
-    // 現行の先頭 ", " を除去
+    // Remove the leading ", " from the current line
     lines[i] = (m[1] ?? "") + (m[2] ?? "");
 
-    // 前行の末尾に ","
+    // Append "," to the end of the previous line
     lines[i - 1] = prev.replace(/\s*$/, "") + ",";
   }
 

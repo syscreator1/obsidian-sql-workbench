@@ -20,7 +20,7 @@ export function renderMetaHeader(app: App, container: HTMLElement, meta: SqlMeta
 
   for (const key of sortedKeys) {
     const value = meta[key];
-    if (value == null) continue; // strict対策
+    if (value == null) continue; // strict workaround
 
     const row = header.createDiv({ cls: "sql-inline-meta__row" });
     row.createSpan({ cls: "sql-inline-meta__key", text: key.toUpperCase() });
@@ -32,17 +32,17 @@ export function renderMetaHeader(app: App, container: HTMLElement, meta: SqlMeta
       // tags: ['aras','migration']
       let raw = value.trim();
 
-      // [ ... ] 形式なら括弧を外す
+      // If it's in [ ... ] format, strip the brackets
       if (raw.startsWith("[") && raw.endsWith("]")) {
         raw = raw.slice(1, -1).trim();
       }
 
-      // 要素を分割して、余分なクォートを除去
+      // Split elements and remove extra quotes
       const tags = raw
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean)
-        .map((s) => s.replace(/^['"]|['"]$/g, "")) // 先頭末尾の ' or " を落とす
+        .map((s) => s.replace(/^['"]|['"]$/g, "")) // Remove leading/trailing ' or "
         .filter(Boolean);
 
       const tagWrap = row.createSpan({ cls: "sql-inline-meta__tags" });
@@ -56,25 +56,25 @@ export function renderMetaHeader(app: App, container: HTMLElement, meta: SqlMeta
 
           const plugin = (app as any).plugins?.getPlugin?.("sql-workbench");
 
-          // Alt：削除
+          // Alt: remove
           if (ev.altKey) {
             await plugin?.openSqlWorkbenchSearchSidebar?.(t, { action: "remove" });
             return;
           }
 
-          // Ctrl：AND 追加
+          // Ctrl: add with AND
           if (ev.ctrlKey) {
             await plugin?.openSqlWorkbenchSearchSidebar?.(t, { action: "add", mode: "AND" });
             return;
           }
 
-          // Shift：OR 追加
+          // Shift: add with OR
           if (ev.shiftKey) {
             await plugin?.openSqlWorkbenchSearchSidebar?.(t, { action: "add", mode: "OR" });
             return;
           }
 
-          // 通常：リセット（単独）
+          // Default: reset (single tag)
           await plugin?.openSqlWorkbenchSearchSidebar?.(t, { action: "set" });
         });
         tagEl.addEventListener("keydown", (ev) => {
@@ -103,22 +103,22 @@ export function renderMetaHeader(app: App, container: HTMLElement, meta: SqlMeta
 
 export function parseSqlMeta(text: string): SqlMeta {
   const meta: SqlMeta = {};
-  const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/); // ← BOM除去
+  const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/); // ← Strip BOM
 
   let started = false;
 
   for (const line of lines) {
     const trimmed = line.trim();
 
-    // 先頭の空行は無視
+    // Ignore leading blank lines
     if (!started && trimmed === "") continue;
 
     started = true;
 
-    // コメントでなければ終了
+    // Stop when the line is not a comment
     if (!trimmed.startsWith("--")) break;
 
-    // -- tags(任意): value
+    // -- tags(optional): value
     // -- danger(low/medium/high): low
     const match = trimmed.match(/^--\s*([A-Za-z0-9_-]+)(?:\([^)]*\))?\s*:\s*(.*)\s*$/);
     if (!match) continue;
@@ -126,13 +126,13 @@ export function parseSqlMeta(text: string): SqlMeta {
     const rawKey = match[1] ?? "";
     const rawVal = match[2] ?? "";
 
-    // 値の後ろに付けた説明コメント（ -- ... ）は除去（任意）
+    // Remove trailing explanatory comments appended after the value ( -- ... ) (optional)
     const parts = rawVal.split(/\s+--\s+/);
     const value = (parts[0] ?? "").trim();
 
     const key = rawKey.toLowerCase();
 
-    // 空値は「未設定」として扱う（任意：保存しない）
+    // Treat empty values as "unset" (optional: don't store)
     if (!value) continue;
 
     if (meta[key]) meta[key] = `${meta[key]}, ${value}`;
@@ -163,7 +163,7 @@ export function splitSqlWithMeta(text: string): SqlChunk[] {
     if (sql) {
       result.push({
         sql,
-        meta: { ...currentMeta }, // ★その時点のメタをコピー
+        meta: { ...currentMeta }, // ★ Copy the metadata at that point
       });
     }
     buffer = [];
@@ -173,20 +173,20 @@ export function splitSqlWithMeta(text: string): SqlChunk[] {
     const line = lines[i];
     if (line === undefined) continue;
 
-    // メタタグ行
+    // Meta tag line
     if (line.trim().startsWith("--")) {
-      const meta = parseSqlMeta(line + "\n"); // 1行だけでもOK
+      const meta = parseSqlMeta(line + "\n"); // Works even with a single line
       if (Object.keys(meta).length > 0) {
-        // 直前の SQL を確定
+        // Finalize the preceding SQL
         flush();
 
-        // ★ currentMeta を更新
+        // ★ Update currentMeta
         currentMeta = { ...currentMeta, ...meta };
         continue;
       }
     }
 
-    // SQL 文の終端
+    // SQL statement terminator
     if (line.trim() === ";") {
       buffer.push(line);
       flush();

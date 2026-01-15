@@ -55,8 +55,8 @@ export class SqlResultView extends ItemView {
   appendDebug(line: string) {
     const ts = new Date().toISOString().slice(11, 23); // HH:mm:ss.mmm
     this.debugLines.push(`[${ts}] ${line}`);
-    if (this.debugLines.length > 200) this.debugLines.shift(); // 上限
-    this.render(); // すぐ反映
+    if (this.debugLines.length > 200) this.debugLines.shift(); // Cap size
+    this.render(); // Reflect immediately
   }
 
   getViewType(): string {
@@ -89,7 +89,7 @@ export class SqlResultView extends ItemView {
       return;
     }
 
-    // 単体結果
+    // Single result
     this.single = payload;
     this.multi = null;
     this.render();
@@ -100,7 +100,7 @@ export class SqlResultView extends ItemView {
     title: string,
     sql: string,
     content: SinglePayload,
-    profile?: string // ★追加
+    profile?: string
   ) {
     if (!this.multi) return;
     if (index < 0 || index >= this.multi.tabs.length) return;
@@ -126,8 +126,8 @@ export class SqlResultView extends ItemView {
       content,
     };
 
-    // 初回実行時は 1タブ目が動いていることが多いので、必要なら自動でアクティブ移動してもOK
-    // 今回は「アクティブはユーザーが切替」で固定にします
+    // On first execution, the first tab is often running.
+    // Auto-switching is possible, but here we keep tab switching user-driven.
 
     this.render();
   }
@@ -171,7 +171,6 @@ export class SqlResultView extends ItemView {
       if (t.meta?.rows != null) btn.createSpan({ cls: "sqlwb-badge", text: `${t.meta.rows} rows` });
       if (t.meta?.elapsedMs != null) btn.createSpan({ cls: "sqlwb-badge", text: `${t.meta.elapsedMs} ms` });
 
-
       btn.onclick = () => {
         multi.active = i;
         this.render();
@@ -186,7 +185,7 @@ export class SqlResultView extends ItemView {
       return;
     }
 
-    // ★ Used profile 表示（タブごと）
+    // ★ Display used profile (per tab)
     const usedProfile =
       (active.content as any)?.profile ?? (active as any)?.profile ?? "";
 
@@ -202,11 +201,11 @@ export class SqlResultView extends ItemView {
       sqlBox.createEl("summary", { text: "SQL" });
       sqlBox.createEl("pre", { text: active.sql });
 
-      // ★タブごとの open 状態を復元
+      // ★ Restore open/closed state per tab
       const open = this.sqlDetailsOpenByTab.get(multi.active) ?? false;
       sqlBox.open = open;
 
-      // ★開閉が変わったら記憶
+      // ★ Persist state when toggled
       sqlBox.addEventListener("toggle", () => {
         this.sqlDetailsOpenByTab.set(multi.active, sqlBox.open);
       });
@@ -289,9 +288,9 @@ export class SqlResultView extends ItemView {
     if (v instanceof Date) return v.toISOString();
 
     // Buffer / Uint8Array
-    // (mssql/tedious で binary 系が来ることがある)
+    // (Binary types may be returned by mssql/tedious)
     if (typeof Buffer !== "undefined" && Buffer.isBuffer(v)) {
-      // 長すぎると重いので短縮
+      // Truncate to avoid heavy rendering
       const hex = v.toString("hex");
       return hex.length > 64 ? `${hex.slice(0, 64)}…` : hex;
     }
@@ -305,26 +304,26 @@ export class SqlResultView extends ItemView {
 
     // Array
     if (Array.isArray(v)) {
-      // ["0","0"] みたいなケースは "0" にしたい？
-      // ここは好みに合わせて挙動を選べます。
+      // Example: ["0","0"] -> want to show "0"?
+      // Choose behavior as preferred.
 
-      // A) 全要素同じなら 1つだけ表示（["0","0"] => "0"）
+      // A) If all elements are identical, show only one (["0","0"] => "0")
       const allSame =
         v.length > 0 && v.every((x) => String(x) === String(v[0]));
       if (allSame) return this.formatCell(v[0]);
 
-      // B) それ以外はカンマ区切り（["a","b"] => "a, b"）
+      // B) Otherwise, comma-separated (["a","b"] => "a, b")
       return v.map((x) => this.formatCell(x)).join(", ");
     }
 
     // Plain object
     if (typeof v === "object") {
-      // ありがちな形だけ先に拾う（必要なら増やせます）
-      // 例: { value: ... } / { text: ... } など
+      // Handle common shapes first (extend as needed)
+      // e.g., { value: ... } / { text: ... }
       if ("value" in v) return this.formatCell((v as any).value);
       if ("text" in v) return this.formatCell((v as any).text);
 
-      // 最後はJSON（長い場合は短縮）
+      // Fallback to JSON (truncate if long)
       try {
         const s = JSON.stringify(v);
         return s.length > 200 ? `${s.slice(0, 200)}…` : s;
@@ -345,7 +344,7 @@ export class SqlResultView extends ItemView {
     const tab = multi.tabs[idx];
     if (!tab?.sql) return;
 
-    // running 表示
+    // Show running state
     tab.state = "running";
     tab.meta = undefined;
     tab.content = { kind: "message", message: "Running..." };
@@ -356,11 +355,11 @@ export class SqlResultView extends ItemView {
       const result: any = await (this.plugin as any).executeSql(tab.sql, tab.profile);
       const elapsedMs = Date.now() - t0;
 
-      // DbClient(QueryResult) 前提
+      // Assumes DbClient(QueryResult)
       const rows: any[] = Array.isArray(result?.rows) ? result.rows : [];
       const columns: string[] = Array.isArray(result?.columns) ? result.columns : [];
 
-      // rowsLimit（仮）
+      // rowsLimit (temporary)
       const limit = 500;
 
       this.updateTab(idx, tab.title, tab.sql, {

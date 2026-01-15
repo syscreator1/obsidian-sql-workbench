@@ -5,8 +5,8 @@ export type NodeKind =
   | "functionExpression";
 
 export type CodeNode = {
-  id: string;              // 一意ID（例: file#QualifiedName）
-  name: string;            // 表示名（例: Plugin.onload / Foo.bar）
+  id: string;              // Unique ID (e.g., file#QualifiedName)
+  name: string;            // Display name (e.g., Plugin.onload / Foo.bar)
   kind: NodeKind;
   filePath: string;
   line: number;            // 1-based
@@ -20,7 +20,6 @@ export type CallEdge = {
   kind?: "call" | "wiring";
 };
 
-
 export type CallGraph = {
   nodes: Record<string, CodeNode>;
   edges: CallEdge[];
@@ -30,7 +29,7 @@ export type CallGraph = {
 export type CallGraphNode = {
   id: string;
   name: string;
-  kind: string;        // "function" | "method" | "arrow" など。まずは string でOK
+  kind: string;        // e.g., "function" | "method" | "arrow". Using string for now is fine.
   filePath: string;
   line: number;
 };
@@ -40,6 +39,5 @@ export type CallGraphEdge = {
   toId: string;
   callText?: string;
   line?: number;
-  kind?: string;       // "wiring" が入る可能性があるので optional
+  kind?: string;       // Optional because values like "wiring" may appear
 };
-

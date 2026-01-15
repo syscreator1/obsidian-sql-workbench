@@ -3,7 +3,7 @@ import SqlWorkbenchPlugin from "./main";
 
 export type DbType = "sqlserver" | "postgres";
 
-// ★ここを追加：settings.ts 内で使う型（他ファイルに無いならここで定義）
+// Added: types used within settings.ts (define here if they don't exist elsewhere)
 type SqlFormatLanguage = "tsql" | "sql" | "postgresql" | "mysql" | "sqlite" | "plsql";
 type SqlKeywordCase = "upper" | "lower" | "preserve";
 type SqlIndentStyle = "standard" | "tabularLeft" | "tabularRight";
@@ -26,7 +26,7 @@ export class SqlWorkbenchSettingTab extends PluginSettingTab {
     // --- Indent size ---
     new Setting(containerEl)
       .setName("Indent size")
-      .setDesc("1段のスペース数（2 or 4 推奨）")
+      .setDesc("Number of spaces per indent level (2 or 4 recommended)")
       .addText((t) => {
         t.setPlaceholder("2")
           .setValue(String(this.plugin.settings.format.indentSize ?? 2))
@@ -38,7 +38,7 @@ export class SqlWorkbenchSettingTab extends PluginSettingTab {
             this.plugin.settings.format.indentSize = size;
             await this.plugin.saveSettings();
 
-            // 編集ビューが開いていれば反映
+            // Apply if an editor view is open
             this.plugin.refreshOpenSqlEditors();
           });
       });
@@ -46,7 +46,7 @@ export class SqlWorkbenchSettingTab extends PluginSettingTab {
     // --- Formatter language ---
     new Setting(containerEl)
       .setName("Formatter language")
-      .setDesc("sql-formatter の方言指定（SQL Serverなら tsql）")
+      .setDesc("Dialect for sql-formatter (use tsql for SQL Server)")
       .addDropdown((dd) => {
         const langs: SqlFormatLanguage[] = [
           "tsql",
@@ -67,7 +67,7 @@ export class SqlWorkbenchSettingTab extends PluginSettingTab {
     // --- Keyword case ---
     new Setting(containerEl)
       .setName("Keyword case")
-      .setDesc("キーワードの大文字/小文字")
+      .setDesc("Keyword casing (upper/lower)")
       .addDropdown((dd) => {
         const cases: SqlKeywordCase[] = ["upper", "lower", "preserve"];
         cases.forEach((x) => dd.addOption(x, x));
@@ -81,7 +81,7 @@ export class SqlWorkbenchSettingTab extends PluginSettingTab {
     // --- Indent style ---
     new Setting(containerEl)
       .setName("Indent style")
-      .setDesc("インデントスタイル")
+      .setDesc("Indentation style")
       .addDropdown((dd) => {
         const styles: SqlIndentStyle[] = [
           "standard",
@@ -99,7 +99,7 @@ export class SqlWorkbenchSettingTab extends PluginSettingTab {
     // --- Comma position ---
     new Setting(containerEl)
       .setName("Comma position")
-      .setDesc("前カンマ（before）/ 後カンマ（after）")
+      .setDesc("Leading comma (before) / trailing comma (after)")
       .addDropdown((dd) => {
         dd.addOption("after", "after (trailing comma)");
         dd.addOption("before", "before (leading comma)");
@@ -117,11 +117,11 @@ export class SqlWorkbenchSettingTab extends PluginSettingTab {
     if (!this.plugin.settings.profiles?.length) {
       new Setting(containerEl)
         .setName("DB profiles")
-        .setDesc("プロファイルがまだありません。settings.ts の DEFAULT_SETTINGS に profiles を追加してください。");
+        .setDesc("No profiles yet. Add profiles in settings.ts (DEFAULT_SETTINGS).");
     } else {
       new Setting(containerEl)
         .setName("Active DB profile")
-        .setDesc("SQL実行に使う接続プロファイルを選択します")
+        .setDesc("Select the connection profile used for SQL execution")
         .addDropdown((dd) => {
           const profiles = this.plugin.settings.profiles ?? [];
 
@@ -130,7 +130,7 @@ export class SqlWorkbenchSettingTab extends PluginSettingTab {
             dd.addOption(p.name, `${p.name} (${p.type})`);
           }
 
-          // current (存在しない場合は先頭に寄せる)
+          // current (fall back to the first entry if missing)
           const current =
             profiles.find((p) => p.name === this.plugin.settings.activeProfile)?.name ??
             profiles[0]?.name ??
@@ -142,7 +142,7 @@ export class SqlWorkbenchSettingTab extends PluginSettingTab {
             this.plugin.settings.activeProfile = v;
             await this.plugin.saveSettings();
 
-            // ★任意：接続キャッシュを持っているなら破棄して張り直す
+            // Optional: if you have a connection cache, dispose and recreate it
             (this.plugin as any).resetDbClients?.();
           });
         });
@@ -150,7 +150,7 @@ export class SqlWorkbenchSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Add profile")
-      .setDesc("新しい接続プロファイルを追加します")
+      .setDesc("Add a new connection profile")
       .addButton((b) =>
         b.setButtonText("Add").onClick(async () => {
           const next = this.makeNewProfile();
@@ -166,31 +166,29 @@ export class SqlWorkbenchSettingTab extends PluginSettingTab {
         })
       );
 
-    // 1件ずつ編集UI
+    // One editor UI per profile
     const profiles = this.plugin.settings.profiles ?? [];
     profiles.forEach((p, i) => {
       this.renderProfileEditor(containerEl, p, i);
     });
 
-
   }
 
   private renderProfileEditor(containerEl: HTMLElement, p: DbProfile, index: number) {
-    // 見出し
+    // Heading
     const headerEl = containerEl.createEl("h4", { text: `${p.name} (${p.type})` });
-
 
     // Name
     new Setting(containerEl)
       .setName("Name")
-      .setDesc("プロファイル名（重複不可）")
+      .setDesc("Profile name (must be unique)")
       .addText((t) => {
         t.setValue(p.name);
 
-        // 以前の名前（activeProfile追従・reset対象判定に使う）
+        // Previous name (used to keep activeProfile in sync and decide what to reset)
         let prevName = p.name;
 
-        // 重複時に入力欄を赤くする（軽いフィードバック）
+        // Highlight the input in red when duplicated (lightweight feedback)
         const setDupState = (isDup: boolean) => {
           t.inputEl.toggleClass("is-invalid", isDup);
           t.inputEl.setAttr("aria-invalid", isDup ? "true" : "false");
@@ -199,7 +197,7 @@ export class SqlWorkbenchSettingTab extends PluginSettingTab {
         const isDupName = (name: string) =>
           this.plugin.settings.profiles.some((x, idx) => idx !== index && x.name === name);
 
-        // 入力中：モデル更新＋ヘッダ更新のみ（再描画しない）
+        // While typing: update the model + header only (no full re-render)
         t.onChange((v) => {
           const next = (v ?? "").trim();
           if (!next) {
@@ -211,7 +209,7 @@ export class SqlWorkbenchSettingTab extends PluginSettingTab {
           setDupState(dup);
           if (dup) return;
 
-          // activeProfile がこのプロファイルなら追従（ただし表示再描画はしない）
+          // Keep activeProfile in sync if it points to this profile (no re-render)
           if (this.plugin.settings.activeProfile === prevName) {
             this.plugin.settings.activeProfile = next;
           }
@@ -220,7 +218,7 @@ export class SqlWorkbenchSettingTab extends PluginSettingTab {
           headerEl.setText(`${p.name} (${p.type})`);
         });
 
-        // 確定（フォーカスアウト）時：保存＋必要なら再描画
+        // On commit (blur): save + re-render if needed
         t.inputEl.addEventListener("blur", async () => {
           const next = (t.getValue?.() ?? t.inputEl.value ?? "").trim();
           if (!next) return;
@@ -229,14 +227,14 @@ export class SqlWorkbenchSettingTab extends PluginSettingTab {
           setDupState(dup);
           if (dup) return;
 
-          // ここで初めて保存・接続リセット
+          // Save + reset connections only here
           await this.saveAndReset();
 
-          // プロファイル名は Map キーに使っている可能性が高いので安全に全リセット推奨
-          // （部分リセットだと旧キーが残る可能性がある）
+          // Profile name is likely used as a Map key, so a full reset is safer
+          // (partial reset may leave stale keys behind)
           await this.plugin.resetDbClients();
 
-          // 見出しやドロップダウンなどを整合させたい場合だけ再描画（blurなのでフォーカス問題なし）
+          // Re-render only when you want to sync headings/dropdowns, etc. (blur avoids focus issues)
           this.display();
 
           prevName = next;
@@ -254,7 +252,7 @@ export class SqlWorkbenchSettingTab extends PluginSettingTab {
         dd.onChange(async (v) => {
           p.type = v as DbType;
 
-          // typeを変えたときに port のデフォルトを寄せる（任意）
+          // Optionally adjust the default port when switching types
           if (p.type === "postgres" && (!p.port || p.port === 1433)) p.port = 5432;
           if (p.type === "sqlserver" && (!p.port || p.port === 5432)) p.port = 1433;
           //if (p.type === "mysql" && (!p.port || p.port === 5432 || p.port === 1433)) p.port = 3306;
@@ -300,7 +298,7 @@ export class SqlWorkbenchSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Password")
-      .setDesc("設定は data.json に平文で保存されます")
+      .setDesc("Settings are stored in plain text in data.json")
       .addText((t) => {
         t.setValue(p.password ?? "");
         (t.inputEl as HTMLInputElement).type = "password";
@@ -332,7 +330,7 @@ export class SqlWorkbenchSettingTab extends PluginSettingTab {
 
       new Setting(containerEl)
         .setName("Encrypt")
-        .setDesc("SQL Server 2012などでSSL/TLSエラーになる場合はOFF推奨")
+        .setDesc("If you hit SSL/TLS errors on SQL Server 2012, turning this off is recommended")
         .addToggle((tg) => {
           tg.setValue(!!p.options?.encrypt);
           tg.onChange(async (v) => {
@@ -374,7 +372,7 @@ export class SqlWorkbenchSettingTab extends PluginSettingTab {
         b.setButtonText("Delete").setCta().onClick(async () => {
           this.plugin.settings.profiles.splice(index, 1);
 
-          // activeProfile が消えたら先頭へ
+          // If the activeProfile was deleted, fall back to the first profile
           if (this.plugin.settings.activeProfile === p.name) {
             this.plugin.settings.activeProfile =
               this.plugin.settings.profiles[0]?.name ?? "";
@@ -429,7 +427,7 @@ export interface SqlWorkbenchSettings {
     indentStyle: SqlIndentStyle;
     commaPosition: SqlCommaPosition;
   };
-  activeProfile: string;     // name か id
+  activeProfile: string;     // name or id
   profiles: {
     name: string;
     type: "sqlserver" | "postgres";
@@ -453,7 +451,7 @@ export const DEFAULT_SETTINGS: SqlWorkbenchSettings = {
     commaPosition: "before",
   },
 
-  // 新：profiles
+  // New: profiles
   activeProfile: "pg-dev",
   profiles: [
     {
@@ -490,7 +488,7 @@ export const DEFAULT_SETTINGS: SqlWorkbenchSettings = {
 };
 
 export interface DbProfile {
-  name: string;          // 表示名
+  name: string;          // Display name
   type: DbType;
   host: string;
   port: number;
@@ -501,6 +499,6 @@ export interface DbProfile {
   trustServerCertificate?: boolean;
   encrypt?: boolean;
 
-  // type別追加オプションは一旦 optional
+  // Type-specific options are optional for now
   options?: Record<string, any>;
 }

@@ -36,30 +36,30 @@ export function sqlGlobalHotkeys(): Extension {
         this.view = view;
 
         this.handler = (e: KeyboardEvent) => {
-          // SQL Viewer のエディタにフォーカスがある時だけ有効
+          // Enable only when the SQL Workbench editor has focus
           if (!this.view.hasFocus) return;
 
           const isMod = e.ctrlKey || e.metaKey;
 
-          // 環境差があるので key/code どちらも見る（日本語配列対策も含む）
+          // Check both key and code for platform differences (also handles JP layout)
           const isSlash =
             e.key === "/" ||
             e.code === "Slash" ||
             e.key === "Divide" ||
-            e.code === "IntlRo"; // 一部JISで出ることがある
+            e.code === "IntlRo"; // Some JIS layouts may emit this
 
           const isQuestion = e.key === "?" || (e.shiftKey && isSlash);
 
-          // Ctrl+/（または Cmd+/）
+          // Ctrl+/ (or Cmd+/)
           if (isMod && !e.shiftKey && isSlash) {
             e.preventDefault();
             e.stopPropagation();
-            e.stopImmediatePropagation(); // ★Obsidian側を確実に止める
+            e.stopImmediatePropagation(); // ★ Ensure Obsidian's default handler is blocked
             toggleSqlLineComment(this.view);
             return;
           }
 
-          // Ctrl+Shift+/（または Cmd+Shift+/）
+          // Ctrl+Shift+/ (or Cmd+Shift+/)
           if (isMod && (isQuestion || (e.shiftKey && isSlash))) {
             e.preventDefault();
             e.stopPropagation();
@@ -69,7 +69,7 @@ export function sqlGlobalHotkeys(): Extension {
           }
         };
 
-        // ★capture=true が重要（Obsidianのグローバルより先に取る）
+        // ★ capture=true is important (capture before Obsidian's global handler)
         window.addEventListener("keydown", this.handler, true);
       }
 
@@ -115,7 +115,7 @@ export class SqlWorkbenchView extends FileView {
     this.contentEl.empty();
     this.contentEl.addClass("sql-workbench");
 
-    // 右上アクション
+    // Top-right actions
     this.addAction("save", "Save", async () => {
       await this.saveIfNeeded(true);
     });
@@ -128,7 +128,6 @@ export class SqlWorkbenchView extends FileView {
       await this.toggleEditMode();
     });
 
-
     this.contentEl.createEl("div", { text: "No SQL file loaded." });
   }
 
@@ -140,7 +139,7 @@ export class SqlWorkbenchView extends FileView {
     this.fileText = text;
 
     if (changed) {
-      // dirty 扱いにする（自動保存はしない）
+      // Mark as dirty (do not auto-save)
       this.dirty = true;
     }
 
@@ -173,12 +172,12 @@ export class SqlWorkbenchView extends FileView {
 
     if (danger !== "low") {
       const ok = await this.confirmDanger(danger, sqlText);
-      if (!ok) return; // ★ここで中断
+      if (!ok) return; // ★ Abort here
     }
 
     const text = (sqlText ?? "").trim();
     if (!text) {
-      new Notice("SQLが空です");
+      new Notice("SQL is empty");
       return;
     }
 
@@ -217,7 +216,7 @@ export class SqlWorkbenchView extends FileView {
       });
 
       if (rows.length > limit) {
-        new Notice(`表示は先頭 ${limit} 行のみです（全 ${rows.length} 行）`);
+        new Notice(`Showing only the first ${limit} rows (total: ${rows.length})`);
       }
     } catch (e: any) {
       await (this.plugin as any).showResult(this.leaf, {
@@ -234,7 +233,7 @@ export class SqlWorkbenchView extends FileView {
       const d = (meta["danger"] ?? "").toLowerCase();
       if (d === "high" || d === "medium" || d === "low") return d;
     } catch {}
-    return "medium"; // 未指定は安全側
+    return "medium"; // Default to the safer side when unspecified
   }
 
 private async confirmDanger(danger: "low" | "medium" | "high", sql: string): Promise<boolean> {
@@ -252,7 +251,7 @@ private async confirmDanger(danger: "low" | "medium" | "high", sql: string): Pro
     });
 
     const pre = modal.contentEl.createEl("pre");
-    pre.setText(sql.slice(0, 4000)); // 長過ぎると重いので上限
+    pre.setText(sql.slice(0, 4000)); // Cap length to avoid UI slowdown
 
     const buttons = modal.contentEl.createDiv({ cls: "sqlwb-confirm-buttons" });
 
@@ -262,7 +261,7 @@ private async confirmDanger(danger: "low" | "medium" | "high", sql: string): Pro
     btnCancel.onclick = () => { modal.close(); resolve(false); };
     btnRun.onclick = () => { modal.close(); resolve(true); };
 
-    // フォーカスはキャンセル優先
+    // Prefer focusing Cancel by default
     setTimeout(() => btnCancel.focus(), 0);
 
     modal.open();
@@ -275,7 +274,7 @@ private async confirmDanger(danger: "low" | "medium" | "high", sql: string): Pro
 
     const name = (fromFile ?? "").trim() || active;
 
-    // profiles が空/activeProfile 未設定などの保険
+    // Safety net for empty profiles / missing activeProfile
     if (!name) {
       const first = this.plugin.settings.profiles?.[0]?.name;
       return first ?? "";
@@ -394,7 +393,7 @@ private async confirmDanger(danger: "low" | "medium" | "high", sql: string): Pro
         return;
       }
 
-      // 選択がある場合：後ろから順に置換（位置ズレ防止）
+      // If there is a selection: replace from the end to avoid offset shifts
       const nonEmpty = ranges
         .filter((r) => !r.empty)
         .map((r) => ({ from: Math.min(r.from, r.to), to: Math.max(r.from, r.to) }))
@@ -420,7 +419,7 @@ private async confirmDanger(danger: "low" | "medium" | "high", sql: string): Pro
   private async render(): Promise<void> {
     this.contentEl.empty();
 
-    // メタ表示（既存の関数を利用）
+    // Meta display (reuse existing functions)
     const meta = parseSqlMeta(this.fileText ?? "");
     renderMetaHeader(this.app, this.contentEl, meta);
 
@@ -432,7 +431,7 @@ private async confirmDanger(danger: "low" | "medium" | "high", sql: string): Pro
 
       const host = wrap.createDiv({ cls: "sql-inline-cm-host" });
 
-      // 既存 editor があれば破棄
+      // Dispose existing editor if present
       if (this.editorView) {
         this.editorView.destroy();
         this.editorView = null;
@@ -490,7 +489,7 @@ private async confirmDanger(danger: "low" | "medium" | "high", sql: string): Pro
           indentUnit.of(indent),
           lineNumbers(),
           highlightActiveLineGutter(),
-          sql(), // SQL シンタックス
+          sql(), // SQL syntax
           syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
           sqlCommentKeymap(),
           keymap.of([
@@ -517,7 +516,7 @@ private async confirmDanger(danger: "low" | "medium" | "high", sql: string): Pro
       return;
     }
 
-    // --- 表示モード（ハイライト）---
+    // --- View mode (highlighted) ---
     const md = "```sql\n" + (this.fileText ?? "") + "\n```";
     const sourcePath = this.file?.path ?? "";
     const body = this.contentEl.createDiv({ cls: "sql-workbench__body" });
@@ -540,11 +539,11 @@ private async confirmDanger(danger: "low" | "medium" | "high", sql: string): Pro
     const chunks = splitSqlStatementsWithMeta(sqlText);
 
     if (chunks.length === 0) {
-      new Notice("SQLが空です");
+      new Notice("SQL is empty");
       return;
     }
 
-    // multi タブ枠（1件でも tabs 表示にしたくないなら、ここは条件分岐してOK）
+    // Multi-tab container (if you don't want tabs for a single statement, you can branch here)
     await (this.plugin as any).showResult(this.leaf, {
       kind: "multi",
       tabs: chunks.map((_, i) => ({ title: `SQL ${i + 1}`, state: "running" })),
@@ -555,7 +554,7 @@ private async confirmDanger(danger: "low" | "medium" | "high", sql: string): Pro
       const stmt = (c.sql ?? "").trim();
       const t0 = Date.now();
 
-      // danger：SQLごと
+      // danger: per statement
       const d = ((c.meta?.danger ?? "") as string).toLowerCase();
       const danger = (d === "low" || d === "medium" || d === "high") ? d : "medium";
       if (danger !== "low") {
@@ -572,7 +571,7 @@ private async confirmDanger(danger: "low" | "medium" | "high", sql: string): Pro
         }
       }
 
-      // profile：SQLごと
+      // profile: per statement
       const fromMeta = (c.meta?.profile ?? "").toString().trim();
       const profileName = fromMeta || (this.plugin.settings.activeProfile ?? "").trim();
 
@@ -615,7 +614,7 @@ private async confirmDanger(danger: "low" | "medium" | "high", sql: string): Pro
         });
 
         if (rows.length > limit) {
-          new Notice(`表示は先頭 ${limit} 行のみです（全 ${rows.length} 行）`);
+          new Notice(`Showing only the first ${limit} rows (total: ${rows.length})`);
         }
       } catch (e: any) {
         await (this.plugin as any).updateResultTab(this.leaf, {
@@ -629,25 +628,24 @@ private async confirmDanger(danger: "low" | "medium" | "high", sql: string): Pro
     }
   }
 
-
   private getProfileOverrideFromEditor(): string | undefined {
     const text = this.getEditorText();
     return this.getProfileOverrideFromText(text);
   }
 
   private getProfileOverrideFromText(text: string): string | undefined {
-    // 先頭のコメントブロック（-- 連続）内だけを見る
+    // Look only within the leading comment block (consecutive -- lines)
     const lines = (text ?? "").split(/\r?\n/);
 
     for (const line of lines) {
       const trimmed = line.trim();
 
-      // 先頭コメントブロック終了条件：
-      // 空行はスキップして、最初に "--" 以外が出たら終了
+      // End of the leading comment block:
+      // skip blank lines, but stop when the first non "--" line appears
       if (trimmed === "") continue;
       if (!trimmed.startsWith("--")) break;
 
-      // -- profile(任意): xxx
+      // -- profile(optional): xxx
       // -- profile: xxx
       const m = trimmed.match(/^--\s*profile(?:\([^)]*\))?\s*:\s*(.*)$/i);
       if (m) {

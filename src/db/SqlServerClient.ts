@@ -35,7 +35,7 @@ export class SqlServerClient {
 export function createSqlServerClient(mssql: any, p: DbProfile): DbClient {
   const encrypt = toBool(
     p.options?.encrypt ?? (p as any).encrypt,
-    false // ← ★既定は false 推奨
+    false // ← ★Recommended default is false
   );
 
   const trust = toBool(p.trustServerCertificate, true);

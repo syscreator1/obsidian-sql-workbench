@@ -22,9 +22,9 @@ export const VIEW_TYPE_SQL_WORKBENCH_WORKBENCH_SEARCH = "sql-workbench-search";
 export type SearchMode = "AND" | "OR";
 
 export class SqlWorkbenchSearchView extends ItemView {
-  private currentTags: string[] = [];      // ← 複数対応
-  private excludeTags: string[] = [];      // ← 除外対応
-  private mode: SearchMode = "AND";        // ← 検索モード(AND/OR)
+  private currentTags: string[] = [];      // ← Multi-tag support
+  private excludeTags: string[] = [];      // ← Exclusion support
+  private mode: SearchMode = "AND";        // ← Search mode (AND/OR)
   private plugin: SqlWorkbenchPlugin;
 
   constructor(leaf: WorkspaceLeaf, plugin: SqlWorkbenchPlugin) {
@@ -44,7 +44,7 @@ export class SqlWorkbenchSearchView extends ItemView {
     return "search";
   }
 
-  /** 通常クリック：リセット */
+  /** Normal click: reset */
   async setSingleTag(tag: string) {
     const t = (tag ?? "").trim().toLowerCase();
     this.currentTags = t ? [t] : [];
@@ -52,7 +52,7 @@ export class SqlWorkbenchSearchView extends ItemView {
     await this.render();
   }
 
-  /** Ctrl/Shift：追加、Alt：削除 */
+  /** Ctrl/Shift: add, Alt: remove */
   async updateTags(tag: string, mode: SearchMode, action: "add" | "remove") {
     const t = (tag ?? "").trim().toLowerCase();
     if (!t) return;
@@ -79,7 +79,7 @@ export class SqlWorkbenchSearchView extends ItemView {
     const { contentEl } = this;
     contentEl.empty();
 
-    // --- ヘッダ ---
+    // --- Header ---
     const header = contentEl.createDiv({ cls: "sql-search-view__header" });
 
     header.createEl("div", {
@@ -90,10 +90,10 @@ export class SqlWorkbenchSearchView extends ItemView {
           : "SQL Search",
     });
 
-    // ① 入力欄 + モード + ボタン
+    // ① Input + mode + buttons
     const controls = header.createDiv({ cls: "sql-search-view__controls" });
 
-    // 入力欄（カンマ区切り）
+    // Input (comma-separated)
     const input = controls.createEl("input", {
       type: "text",
       cls: "sql-search-view__input",
@@ -106,7 +106,7 @@ export class SqlWorkbenchSearchView extends ItemView {
       },
     });
 
-    // AND/OR セレクト
+    // AND/OR select
     const modeSel = controls.createEl("select", {
       cls: "sql-search-view__mode",
     });
@@ -114,19 +114,19 @@ export class SqlWorkbenchSearchView extends ItemView {
     modeSel.createEl("option", { text: "OR", value: "OR" });
     modeSel.value = this.mode;
 
-    // 適用ボタン
+    // Apply button
     const btnApply = controls.createEl("button", {
       cls: "sql-search-view__btn",
       text: "Apply",
     });
 
-    // クリアボタン
+    // Clear button
     const btnClear = controls.createEl("button", {
       cls: "sql-search-view__btn",
       text: "Clear",
     });
 
-    // 入力を currentTags/mode に反映して再描画
+    // Apply UI input to currentTags/mode and re-render
     const applyFromUi = async () => {
       const raw = input.value ?? "";
 
@@ -148,7 +148,7 @@ export class SqlWorkbenchSearchView extends ItemView {
         }
       }
 
-      // 重複排除
+      // Deduplicate
       this.currentTags = Array.from(new Set(includes));
       this.excludeTags = Array.from(new Set(excludes));
 
@@ -170,7 +170,7 @@ export class SqlWorkbenchSearchView extends ItemView {
       await this.render();
     });
 
-    // Enter で適用
+    // Apply on Enter
     input.addEventListener("keydown", async (ev) => {
       if (ev.key === "Enter") {
         ev.preventDefault();
@@ -178,14 +178,14 @@ export class SqlWorkbenchSearchView extends ItemView {
       }
     });
 
-    // ② 条件チップ（既存機能：クリックで除外）
+    // ② Condition chips (existing feature: click to exclude/remove)
     if (this.currentTags.length > 0) {
       const chips = header.createDiv({ cls: "sql-search-view__chips" });
 
       // include
       for (const t of this.currentTags) {
         const chip = chips.createSpan({ cls: "sql-search-view__chip", text: t });
-        chip.setAttr("title", "クリックで除外（条件から削除）");
+        chip.setAttr("title", "Click to remove (exclude from conditions)");
         chip.addEventListener("click", async () => {
           this.currentTags = this.currentTags.filter((x) => x !== t);
           await this.render();
@@ -195,7 +195,7 @@ export class SqlWorkbenchSearchView extends ItemView {
       // exclude
       for (const t of this.excludeTags) {
         const chip = chips.createSpan({ cls: "sql-search-view__chip is-exclude", text: `-${t}` });
-        chip.setAttr("title", "クリックで除外条件から削除");
+        chip.setAttr("title", "Click to remove from exclusion conditions");
         chip.addEventListener("click", async () => {
           this.excludeTags = this.excludeTags.filter((x) => x !== t);
           await this.render();
@@ -206,8 +206,7 @@ export class SqlWorkbenchSearchView extends ItemView {
       return;
     }
 
-
-    // --- 結果一覧 ---
+    // --- Results list ---
     const list = contentEl.createDiv({ cls: "sql-search-list" });
 
     const files = this.app.vault.getFiles().filter(
@@ -221,7 +220,7 @@ export class SqlWorkbenchSearchView extends ItemView {
       const meta = parseSqlMeta(text);
       const fileTags = meta["tags"] ? normalizeTags(meta["tags"]) : [];
 
-      // 除外タグが1つでも含まれていたら即除外
+      // Exclude immediately if any excluded tag is present
       if (this.excludeTags.length > 0 && this.excludeTags.some((t) => fileTags.includes(t))) {
         continue;
       }
@@ -234,7 +233,7 @@ export class SqlWorkbenchSearchView extends ItemView {
             ? this.currentTags.every((t) => fileTags.includes(t))
             : this.currentTags.some((t) => fileTags.includes(t));
       } else {
-        // include無し＝「除外だけ」で絞り込む（全部表示）
+        // No include tags: filter only by exclusions (show all otherwise)
         matched = true;
       }
 

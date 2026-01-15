@@ -16,7 +16,7 @@ function getSelectedLineRange(view: EditorView, from: number, to: number) {
   const fromLine0 = doc.lineAt(from);
   const toLine0 = doc.lineAt(to);
 
-  // 選択終端が行頭ちょうどなら、その行は含めない（一般的）
+  // If the selection ends exactly at the start of a line, do not include that line (common behavior)
   const toLine =
     to === toLine0.from && toLine0.number > fromLine0.number
       ? doc.line(toLine0.number - 1)
@@ -31,11 +31,11 @@ export const toggleSqlBlockCommentLines: StateCommand = (view: EditorView) => {
 
   const changes: { from: number; to: number; insert: string }[] = [];
 
-  // 変更ズレ防止で後ろから処理
+  // Process from the end to avoid position shifts
   const ranges = [...state.selection.ranges].sort((a, b) => b.from - a.from);
 
   for (const range of ranges) {
-    // 選択なしならカーソル行
+    // If there is no selection, use the cursor line
     const from = range.from;
     const to = range.to === range.from ? doc.lineAt(range.from).to : range.to;
 
@@ -43,25 +43,25 @@ export const toggleSqlBlockCommentLines: StateCommand = (view: EditorView) => {
     let fromLineNum = fromLine0.number;
     let toLineNum = toLine0.number;
 
-    // --- ★重要：選択範囲が /* や */ を含んでいたら、内側の範囲に寄せる ---
-    // 例：先頭が /* 行ならそれを除外して内側を対象にする
+    // --- ★Important: if the selection includes "/*" or "*/", shift to the inner range ---
+    // Example: if the first selected line is "/*", exclude it and target the inner lines
     if (isOnlyBlockStartLine(fromLine0.text) && fromLineNum < doc.lines) {
       fromLineNum += 1;
       fromLine0 = doc.line(fromLineNum);
     }
-    // 例：末尾が */ 行ならそれを除外して内側を対象にする
+    // Example: if the last selected line is "*/", exclude it and target the inner lines
     if (isOnlyBlockEndLine(toLine0.text) && toLineNum > 1) {
       toLineNum -= 1;
       toLine0 = doc.line(toLineNum);
     }
 
-    // 内側がなくなった（/* と */ だけ選んでた等）場合は、元の範囲で判定
-    // → 「囲われているものを外す」動作を優先
+    // If the inner range disappears (e.g. only "/*" and "*/" were selected), fall back to the original range
+    // → Prefer the "unwrap if already wrapped" behavior
     const innerExists = fromLineNum <= toLineNum;
 
-    // 囲われ判定：
-    // A) innerExists のとき：内側の前後に単独行 /* */ があるか
-    // B) innerExists でない（/* と */ だけ等）のとき：選択範囲自体が包み行か
+    // Wrapped detection:
+    // A) When innerExists: check whether the inner range is surrounded by standalone "/*" and "*/" lines
+    // B) When innerExists is false (e.g. only wrapper lines): check whether the selected range itself is wrapper lines
     let wrapStartLine = -1;
     let wrapEndLine = -1;
 
@@ -76,12 +76,12 @@ export const toggleSqlBlockCommentLines: StateCommand = (view: EditorView) => {
         wrapStartLine = prevLine.number;
         wrapEndLine = nextLine.number;
       } else {
-        // 追加で安全策：選択範囲の中に単独行 /* */ が “端” として存在する場合も unwrap 対象にする
-        // （ユーザーが /* 行も一緒に選びがちなので）
+        // Additional safety: also treat it as wrapped if standalone wrapper lines exist at the "edges"
+        // (Users often select the wrapper lines too)
         const firstLine = doc.line(fromLine0.number);
         const lastLine = doc.line(toLine0.number);
 
-        // もし選択の最初が /* 行で、最後の次行が */ 行ならそれも囲いとみなす
+        // If the selection starts with "/*" and the line after the last line is "*/", treat it as wrapped
         const maybeStartIsWrapper = isOnlyBlockStartLine(firstLine.text);
         const maybeEndIsWrapper = isOnlyBlockEndLine(lastLine.text);
 
@@ -93,7 +93,7 @@ export const toggleSqlBlockCommentLines: StateCommand = (view: EditorView) => {
           }
         }
 
-        // もし選択の最後が */ 行で、先頭の前行が /* 行ならそれも囲いとみなす
+        // If the selection ends with "*/" and the line before the first line is "/*", treat it as wrapped
         if (maybeEndIsWrapper && wrapStartLine === -1) {
           const beforeFirst = firstLine.number > 1 ? doc.line(firstLine.number - 1) : null;
           if (beforeFirst && isOnlyBlockStartLine(beforeFirst.text)) {
@@ -102,14 +102,14 @@ export const toggleSqlBlockCommentLines: StateCommand = (view: EditorView) => {
           }
         }
 
-        // もし選択範囲の最初が /* かつ最後が */ なら（包み行ごと選択）
+        // If the selection includes both "/*" and "*/" as the first/last lines (wrapper lines are selected)
         if (maybeStartIsWrapper && maybeEndIsWrapper) {
           wrapStartLine = firstLine.number;
           wrapEndLine = lastLine.number;
         }
       }
     } else {
-      // innerExists = false：包み行だけ選択している等
+      // innerExists = false: e.g. only wrapper lines are selected
       const firstLine = doc.line(fromLine0.number);
       const lastLine = doc.line(toLine0.number);
 
@@ -122,23 +122,23 @@ export const toggleSqlBlockCommentLines: StateCommand = (view: EditorView) => {
     const wrapped = wrapStartLine !== -1 && wrapEndLine !== -1;
 
     if (wrapped) {
-      // unwrap：wrapStartLine と wrapEndLine を削除
+      // Unwrap: delete wrapStartLine and wrapEndLine
       const startLine = doc.line(wrapStartLine);
       const endLine = doc.line(wrapEndLine);
 
-      // startLine：行全体 + 改行（次行頭まで）
+      // startLine: entire line + newline (until the start of the next line)
       const startFrom = startLine.from;
       const startTo = wrapStartLine < doc.lines ? doc.line(wrapStartLine + 1).from : startLine.to;
 
-      // endLine：行頭から次行頭まで（最終行なら末尾まで）
+      // endLine: from line start to next line start (or to end if it's the last line)
       const endFrom = endLine.from;
       const endTo = wrapEndLine < doc.lines ? doc.line(wrapEndLine + 1).from : endLine.to;
 
-      // 後ろから消す（changes は後ろ優先だけど同range内でも安全に）
+      // Delete from the end first (ranges are processed backwards, but do it safely within this selection too)
       changes.push({ from: endFrom, to: endTo, insert: "" });
       changes.push({ from: startFrom, to: startTo, insert: "" });
     } else {
-      // wrap：元の選択（ユーザーが /* */ 行も含めてたら inner に寄せた範囲）に対して包む
+      // Wrap: wrap the target range (if wrapper lines were selected, we already shifted to the inner range)
       const targetFromLine = innerExists ? fromLine0 : doc.lineAt(from).number ? doc.line(fromLine0.number) : fromLine0;
       const targetToLine = innerExists ? toLine0 : toLine0;
 

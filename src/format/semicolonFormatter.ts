@@ -3,14 +3,14 @@ export function moveSemicolonToOwnLine(sql: string): string {
   const result: string[] = [];
 
   for (const line of lines) {
-    // すでにセミコロン単独行 → 正規化して ";" に統一
+    // Already a semicolon-only line → normalize to ";"
     if (/^\s*;\s*$/.test(line)) {
       result.push(";");
       continue;
     }
 
-    // 行末が ";" のケース（空白やタブ込み）
-    // 例: "abc   ;" → "abc" と ";" に分離
+    // Line ending with ";" (including trailing spaces or tabs)
+    // Example: "abc   ;" → split into "abc" and ";"
     const m = line.match(/^(.*?)(\s*);\s*$/);
     if (m) {
       const body = (m[1] ?? "").trimEnd();
@@ -19,7 +19,7 @@ export function moveSemicolonToOwnLine(sql: string): string {
       continue;
     }
 
-    // それ以外はそのまま
+    // Otherwise, keep the line as-is
     result.push(line);
   }
 
