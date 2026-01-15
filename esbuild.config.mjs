@@ -1,5 +1,8 @@
 import esbuild from "esbuild";
 import process from "process";
+import "dotenv/config";
+import path from "node:path";
+import fs from "node:fs";
 
 const banner =
 `/*
@@ -8,8 +11,26 @@ if you want to view the source, please visit the github repository of this plugi
 */
 `;
 
-const prod = (process.argv[2] === "production");
+const prod = process.argv[2] === "production";
 
+/**
+ * If OBSIDIAN_PLUGIN_DIR is set, output directly into the vault plugin directory.
+ * Otherwise, output into ./dist for portability (CI / forks / other machines).
+ */
+const vaultPluginDir = process.env.OBSIDIAN_PLUGIN_DIR?.trim();
+const outDir = vaultPluginDir ? vaultPluginDir : path.resolve("dist");
+
+if (!vaultPluginDir) {
+  console.log("[esbuild] OBSIDIAN_PLUGIN_DIR is not set. Outputting to ./dist");
+  console.log("[esbuild] Tip: create .env (see .env.example) to deploy directly to your vault.");
+} else {
+  console.log(`[esbuild] Outputting to plugin directory: ${vaultPluginDir}`);
+}
+
+// Ensure output directory exists
+fs.mkdirSync(outDir, { recursive: true });
+
+// Fix for `process/` import edge-case
 const aliasProcessSlash = {
   name: "alias-process-slash",
   setup(build) {
@@ -19,35 +40,34 @@ const aliasProcessSlash = {
   },
 };
 
-
 const context = await esbuild.context({
-	banner: {
-		js: banner,
-	},
-	entryPoints: ["src/main.ts"],
-	platform: "node",
-	bundle: true,
-	external: [
-		"obsidian",
-		"electron",
-		"process",
-		"node:process",
-		"node:*",
-	],
-	plugins: [aliasProcessSlash],
-	format: "cjs",
-	target: "es2018",
-	mainFields: ["module", "main"],
-	logLevel: "info",
-	sourcemap: prod ? false : "inline",
-	treeShaking: true,
-	outfile: "main.js",
-	minify: prod,
+  banner: { js: banner },
+  entryPoints: ["src/main.ts"],
+  platform: "node",
+  bundle: true,
+  external: [
+    "obsidian",
+    "electron",
+    "process",
+    "node:process",
+    "node:*",
+  ],
+  plugins: [aliasProcessSlash],
+  format: "cjs",
+  target: "es2018",
+  mainFields: ["module", "main"],
+  logLevel: "info",
+  sourcemap: prod ? false : "inline",
+  treeShaking: true,
+  outfile: path.join(outDir, "main.js"),
+  minify: prod,
 });
 
 if (prod) {
-	await context.rebuild();
-	process.exit(0);
+  await context.rebuild();
+  await context.dispose();
+  process.exit(0);
 } else {
-	await context.watch();
+  await context.watch();
+  console.log("[esbuild] Watching for changes...");
 }
